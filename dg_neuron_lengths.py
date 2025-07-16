@@ -52,9 +52,10 @@ def process_swc(path):
             if len(parts) < 7:
                 continue
             nid = int(parts[0])
+            ntype = int(parts[1])
             x, y, z = map(float, parts[2:5])
             parent = int(parts[6])
-            nodes[nid] = (x, y, z, parent)
+            nodes[nid] = (x, y, z, parent, ntype)
             if parent == -1 and soma is None:
                 soma = (x, y, z)
     if soma is None:
@@ -63,16 +64,19 @@ def process_swc(path):
     if soma_region not in NEW_IDS.values():
         return None
     lengths = {k: 0.0 for k in NEW_IDS}
-    for nid, (x, y, z, parent) in nodes.items():
+    for nid, (x, y, z, parent, ntype) in nodes.items():
         if parent == -1 or parent not in nodes:
             continue
-        px, py, pz, _ = nodes[parent]
+        # only accumulate axon segments (type 2)
+        if ntype != 2:
+            continue
+        px, py, pz, _, _ = nodes[parent]
         length = segment_length((x, y, z), (px, py, pz))
         mid = ((x + px) / 2.0, (y + py) / 2.0, (z + pz) / 2.0)
         region = get_region(mid)
         for key, val in NEW_IDS.items():
             if region == val:
-                lengths[key] = length
+                lengths[key] += length
                 break
     return soma_region, lengths
 
@@ -96,7 +100,8 @@ def main():
         print('Processed', fname)
 
     with open(OUTPUT_CSV, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=['neuron', 'soma_region']  list(NEW_IDS.keys()))
+        fieldnames = ['neuron', 'soma_region'] + list(NEW_IDS.keys())
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
     print('Saved', OUTPUT_CSV)
